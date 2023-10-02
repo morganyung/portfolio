@@ -1,0 +1,187 @@
+---
+title: "Final Project Analysis"
+output: pdf_document
+date: '2023-04-15'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, message = FALSE, include=FALSE}
+library(data.table)
+
+library(sandwich)
+library(lmtest)
+
+library(AER) 
+
+library(ggplot2) 
+library(patchwork)
+
+library(dplyr)
+
+library(stargazer)
+library(magrittr)
+
+library(knitr)
+```
+```{r load draft data}
+mm_con_1 <- fread('Survey_Results/Mixmax_Sequence_Control_Surveys_Summary_2023_04_06.csv')
+mm_treat_1 <- fread('Survey_Results/Mixmax_Sequence_Treatment_Surveys_Summary_2023_04_06.csv')
+mm_con_2 <- fread('Survey_Results/Mixmax_Sequence_CONTROL_V2_Summary_2023_04_06.csv')
+mm_treat_2 <- fread('Survey_Results/Mixmax_Sequence_TREATMENT_V2_Summary_2023_04_06.csv')
+results_con <- fread('Survey_Results/W241_MIDS_Survey_CONTROL_April_5_2023_21_05.csv')
+results_treat <- fread('Survey_Results/W241_MIDS_Survey_Treatment_April_5_2023_21_05.csv')
+
+```
+```{r}
+head(mm_con_1)
+```
+```{r}
+con <- rbind(mm_con_1, mm_con_2)
+treat <- rbind(mm_treat_1, mm_treat_2)
+con <- con[, 'Opens']
+con <- con[, opened:= ifelse(con[,'Opens']>= 1, 1, 0)]
+
+treat <- treat[, 'Opens']
+treat <- treat[, opened:= ifelse(treat[,'Opens']>= 1, 1, 0)]
+head(con)
+
+```
+```{r}
+nrow(con)
+```
+
+```{r}
+
+proportions_difference_test <- t.test(con[, opened], treat[,opened])
+proportions_difference_test
+com_diff_p <- proportions_difference_test$p.value
+com_diff_p
+
+```
+```{r}
+head(results_con)
+```
+```{r}
+num_con_r <- nrow(results_con[3:nrow(results_con)])
+num_treat_r <- nrow(results_treat[3:nrow(results_treat)])
+num_con_o <- sum(con[,opened])
+num_treat_o <- sum(treat[,opened])
+```
+```{r}
+comb_con_ro <- c(rep(1, num_con_r), rep(0, num_con_o - num_con_r))
+table(comb_con_ro)
+comb_treat_ro <- c(rep(1, num_treat_r), rep(0, num_treat_o - num_treat_r))
+table(comb_treat_ro)
+```
+```{r}
+t.test(comb_con_ro, comb_treat_ro)
+```
+```{r}
+con_c <- mm_con_2[, c('Opens', 'Clicks')]
+con_c <- con_c[, Opened:= ifelse(con_c[,'Opens']>= 1, 1, 0)]
+con_c <- con_c[, Clicked:= ifelse(con_c[,'Clicks']>= 1, 1, 0)]
+con_c <- con_c[, c('Opened', 'Clicked')]
+
+treat_c <- mm_treat_2[, c('Opens', 'Clicks')]
+treat_c <- treat_c[, Opened:= ifelse(treat_c[,'Opens']>= 1, 1, 0)]
+treat_c <- treat_c[, Clicked:= ifelse(treat_c[,'Clicks']>= 1, 1, 0)]
+treat_c <- treat_c[, c('Opened', 'Clicked')]
+
+t.test(con_c[, Opened], treat_c[, Opened])
+
+```
+```{r}
+
+t.test(con_c[, Clicked], treat_c[, Clicked])
+```
+```{r}
+length(comb_con_ro)
+```
+```{r}
+t2 <-t.test(con_c[, Clicked], treat_c[, Clicked])
+```
+```{r}
+con_open_sd <- tapply(con_c[, Clicked], treat_c[, Clicked], sd)[1]
+```
+```{r}
+1/unname(con_open_sd['0'])
+```
+
+
+
+```{r}
+extra_con_o <- nrow(con) - length(comb_con_ro)
+con <- con[, replied:= c(comb_con_ro, rep(0, extra_con_o))]
+con <- con[, c('opened', 'replied')]
+
+extra_treat_o <- nrow(treat) - length(comb_treat_ro)
+treat <- treat[, replied:= c(comb_treat_ro, rep(0, extra_treat_o))]
+treat <- treat[, c('opened', 'replied')]
+```
+
+```{r}
+open_sd <- tapply(con_c[, Opened], treat_c[, Opened], sd)
+open_con_sd <- unname(open_sd['0'])
+open_treat_sd <- unname(open_sd['1'])
+
+test2 <-data.frame('Group' = c('Control', 'Treatment'),'N' = c('1000', '1000'), 'Open Rate' = c('55.4%', '56.2%'),'Std Error' = c(open_con_sd/sqrt(1000), open_treat_sd/sqrt(1000)), 'p-value' = c(0.719, ''))
+
+stargazer(test2,summary = FALSE, type = 'text', rownames = FALSE, title = 'Compliance Rate Comparison')
+```
+```{r}
+open_sd['1']/sqrt(1000)
+```
+
+```{r}
+# reply_sd <- tapply(comb_con_ro, comb_treat_ro, sd)
+# reply_con_sd <- unname(reply_sd['0'])
+# reply_treat_sd <- unname(reply_sd['1'])
+
+test3 <-data.frame('Group' = c('Control', 'Treatment'),'N' = c(num_con_o, num_treat_o), 'Replied Rate' = c('8.66%', '9.25%'), 'p-value' = c(0.731, ''))
+stargazer(test3,summary = FALSE, type = 'text', rownames = FALSE, title = 'Survey Response Rate Comparision')
+
+# test3 <-data.frame('Group' = c('Control', 'Treatment'),'N' = c(num_con_o, num_treat_o), 'Replied Rate' = c('8.66', '9.25%'), 'Std Error' = c(reply_con_sd/sqrt(num_con_o), reply_treat_sd/sqrt(num_treat_o)), 'p-value' = c(0.731, ''))
+# stargazer(test3,summary = FALSE, type = 'text', rownames = FALSE, title = 'Survey Response Rate Comparision')
+```
+```{r}
+length(comb_treat_ro)
+```
+
+
+```{r}
+nrow(con)
+```
+
+
+
+```{r}
+head(treat)
+```
+
+```{r}
+table(con_c[Opened == 1, Clicked])
+
+```
+```{r}
+table(con_c$Clicks)
+```
+
+
+```{r}
+head(con_c[, Clicks != '-'])
+```
+
+
+
+
+
+
+
+
+
+
+
+
